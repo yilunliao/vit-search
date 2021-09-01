@@ -1,0 +1,49 @@
+FROM ubuntu:18.04
+
+WORKDIR /root/
+
+# Add libcuda dummy dependency
+ADD control .
+RUN apt-get update && \
+	apt-get install --yes equivs && \
+	equivs-build control && \
+	dpkg -i libcuda1-dummy_10.0_all.deb && \
+	rm control libcuda1-dummy_10.0_all.deb && \
+	apt-get remove --yes --purge --autoremove equivs && \
+	rm -rf /var/lib/apt/lists/*
+
+# Setup Lambda repository
+ADD lambda.gpg .
+RUN apt-get update && \
+	apt-get install --yes gnupg && \
+	apt-key add lambda.gpg && \
+	rm lambda.gpg && \
+	echo "deb http://archive.lambdalabs.com/ubuntu bionic main" > /etc/apt/sources.list.d/lambda.list && \
+	echo "Package: *" > /etc/apt/preferences.d/lambda && \
+	echo "Pin: origin archive.lambdalabs.com" >> /etc/apt/preferences.d/lambda && \
+	echo "Pin-Priority: 1001" >> /etc/apt/preferences.d/lambda && \
+	echo "cudnn cudnn/license_preseed select ACCEPT" | debconf-set-selections && \
+	apt-get update && \
+	DEBIAN_FRONTEND=noninteractive \
+		apt-get install --no-install-recommends --yes lambda-stack-cuda lambda-server && \
+	rm -rf /var/lib/apt/lists/*
+
+# Setup for nvidia-docker
+ENV NVIDIA_VISIBLE_DEVICES all
+ENV NVIDIA_DRIVER_CAPABILITIES compute,utility
+ENV NVIDIA_REQUIRE_CUDA "cuda>=10.0"
+
+# Make Python3 the default environment
+RUN rm /usr/bin/python && \
+    ln -s /usr/bin/python3.6 /usr/bin/python
+RUN mv /usr/bin/pip /usr/bin/pip_bak && \
+    ln -s /usr/bin/pip3 /usr/bin/pip
+
+# Install the dependencies of training
+RUN pip install tqdm tensorboardX
+RUN pip install --index-url https://developer.download.nvidia.com/compute/redist/cuda/10.0 nvidia-dali
+RUN apt-get update && apt-get install -y python3-dev python3-pybind11 vim wget
+RUN git clone https://github.com/NVIDIA/apex /tmp/apex && \
+    cd /tmp/apex && \
+    pip install -v --no-cache-dir --global-option="--cpp_ext" --global-option="--cuda_ext" ./ && \
+    rm -rf /tmp/apex

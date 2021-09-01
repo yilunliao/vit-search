@@ -1,0 +1,46 @@
+FROM nvidia/cuda:10.1-cudnn7-devel-ubuntu18.04
+
+# Install Anaconda
+# Updating Ubuntu packages
+RUN apt-get update && yes|apt-get upgrade
+RUN apt-get install -y vim 
+
+# Adding git, wget and bzip2
+RUN apt-get install -y git wget bzip2
+
+# Add sudo
+RUN apt-get -y install sudo
+
+# Add user tjy with no password, add to sudo group
+RUN adduser --disabled-password --gecos '' tjy 
+RUN adduser tjy sudo
+RUN echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+USER tjy 
+WORKDIR /home/tjy/
+RUN chmod a+rwx /home/tjy/
+
+# Anaconda installing
+RUN wget https://repo.anaconda.com/archive/Anaconda3-2020.02-Linux-x86_64.sh -P /tmp/ 
+RUN bash /tmp/Anaconda3-2020.02-Linux-x86_64.sh -b
+RUN rm -f /tmp/Anaconda3-2020.02-Linux-x86_64.sh
+
+# Set path to conda
+ENV PATH /home/tjy/anaconda3/bin:$PATH
+
+# Updating Anaconda packages
+#RUN conda update conda
+#RUN conda update anaconda
+#RUN conda update --all
+
+#WORKDIR /workspace
+
+# Install Pytorch
+RUN conda install pytorch torchvision cudatoolkit=10.1 -c pytorch
+
+# Install the dependencies of training
+RUN pip install tqdm tensorboardX
+RUN pip install --index-url https://developer.download.nvidia.com/compute/redist/cuda/10.0 nvidia-dali
+RUN git clone https://github.com/NVIDIA/apex /tmp/apex && \
+    cd /tmp/apex && \
+    pip install -v --no-cache-dir --global-option="--cpp_ext" --global-option="--cuda_ext" ./ && \
+    rm -rf /tmp/apex
